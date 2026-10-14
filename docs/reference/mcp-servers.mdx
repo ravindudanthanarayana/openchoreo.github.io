@@ -130,6 +130,9 @@ The Resource toolset mirrors the Component toolset for managed infrastructure: d
 - `update_release_binding` — Update a release binding's configuration (release, release_state, overrides, traits, workload settings); set `release_state: Active` to deploy or `Undeploy` to remove from the data plane while keeping the binding
 - `delete_release_binding` — Delete a release binding entirely; for reversible removal that keeps the binding, use `update_release_binding` with `release_state: Undeploy` instead
 - `delete_component_release` — Delete a component release (immutable; useful for pruning old releases)
+- `list_release_binding_revisions` — List the revision history of a component's release bindings, optionally for one environment, newest first, with each revision's display name, cause, health, `active` and `knownGood`
+- `get_release_binding_revision` — Get one revision by object name (`{binding}-r{N}`), including the full binding spec it recorded
+- `rollback_release_binding` — Roll a release binding back to an earlier revision (`revision`). `dry_run` defaults to `true` and only previews the changes and warnings; the agent must show them and get your confirmation before calling again with `dry_run: false`. See [Revision History and Rollback](../developer-guide/deploying-applications/revision-history-and-rollback.md#ai-agents-mcp)
 
 **Resources**
 
@@ -139,6 +142,9 @@ The Resource toolset mirrors the Component toolset for managed infrastructure: d
 - `update_resource_release_binding` — Update a ResourceReleaseBinding's configuration (`resource_release`, `retain_policy`, `resource_type_environment_configs`); promotion is performed by setting `resource_release` to a new ResourceRelease name
 - `delete_resource_release_binding` — Delete a ResourceReleaseBinding; if effective `retainPolicy` is `Retain`, the finalizer holds and the data-plane state persists until the policy is flipped to `Delete`
 - `delete_resource_release` — Delete a ResourceRelease snapshot (immutable; useful for pruning old releases)
+- `list_resource_release_binding_revisions` — List the revision history of a Resource's release bindings, optionally for one environment, newest first
+- `get_resource_release_binding_revision` — Get one ResourceReleaseBinding revision by object name, including the full binding spec it recorded
+- `rollback_resource_release_binding` — Roll a ResourceReleaseBinding back to an earlier revision; `dry_run` defaults to `true`, as for `rollback_release_binding`
 
 **Pipelines & Environments**
 

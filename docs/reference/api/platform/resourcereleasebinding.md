@@ -31,13 +31,14 @@ metadata:
 
 ### Spec Fields
 
-| Field                            | Type                                                        | Required | Default | Description                                                                                                                             |
-| -------------------------------- | ----------------------------------------------------------- | -------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `owner`                          | [ResourceReleaseBindingOwner](#resourcereleasebindingowner) | Yes      | -       | Identifies the Resource this binding deploys (immutable)                                                                                |
-| `environment`                    | string                                                      | Yes      | -       | Name of the target Environment (immutable; must match an existing Environment in the namespace)                                         |
-| `resourceRelease`                | string                                                      | No       | -       | Name of the ResourceRelease pinned by this binding. Unset until promoted; the binding stays pending without it                          |
-| `retainPolicy`                   | string                                                      | No       | -       | Per-environment override for retention. When unset, falls back to the ResourceType's `retainPolicy` (which itself defaults to `Delete`) |
-| `resourceTypeEnvironmentConfigs` | object                                                      | No       | -       | Per-environment values for the referenced ResourceType's `environmentConfigs` schema. Validated by the binding controller               |
+| Field                            | Type                                                        | Required | Default | Description                                                                                                                                                                                                                                                       |
+| -------------------------------- | ----------------------------------------------------------- | -------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `owner`                          | [ResourceReleaseBindingOwner](#resourcereleasebindingowner) | Yes      | -       | Identifies the Resource this binding deploys (immutable)                                                                                                                                                                                                          |
+| `environment`                    | string                                                      | Yes      | -       | Name of the target Environment (immutable; must match an existing Environment in the namespace)                                                                                                                                                                   |
+| `resourceRelease`                | string                                                      | No       | -       | Name of the ResourceRelease pinned by this binding. Unset until promoted; the binding stays pending without it                                                                                                                                                    |
+| `retainPolicy`                   | string                                                      | No       | -       | Per-environment override for retention. When unset, falls back to the ResourceType's `retainPolicy` (which itself defaults to `Delete`)                                                                                                                           |
+| `resourceTypeEnvironmentConfigs` | object                                                      | No       | -       | Per-environment values for the referenced ResourceType's `environmentConfigs` schema. Validated by the binding controller                                                                                                                                         |
+| `releasePin`                     | string                                                      | No       | `Auto`  | `Auto` or `Pinned`. A rollback sets `Pinned`; ResourceReleaseBindings are not advanced automatically, so it has no effect today. See [pinning](../../../developer-guide/deploying-applications/revision-history-and-rollback.md#automatic-deployment-and-pinning) |
 
 :::note
 `owner` and `environment` are immutable after creation. To re-target a binding, delete and recreate it.
@@ -54,10 +55,11 @@ Identifies the Resource this binding deploys.
 
 ### Status Fields
 
-| Field        | Type                                                | Default | Description                                                                                    |
-| ------------ | --------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------- |
-| `conditions` | []Condition                                         | []      | Standard Kubernetes conditions tracking binding state                                          |
-| `outputs`    | [[ResolvedResourceOutput](#resolvedresourceoutput)] | []      | Resolved output values populated by the binding controller from the underlying RenderedRelease |
+| Field             | Type                                                | Default | Description                                                                                                                               |
+| ----------------- | --------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `conditions`      | []Condition                                         | []      | Standard Kubernetes conditions tracking binding state                                                                                     |
+| `outputs`         | [[ResolvedResourceOutput](#resolvedresourceoutput)] | []      | Resolved output values populated by the binding controller from the underlying RenderedRelease                                            |
+| `currentRevision` | string                                              | -       | Object name of the active [revision](../../../developer-guide/deploying-applications/revision-history-and-rollback.md) (`{binding}-r{N}`) |
 
 #### ResolvedResourceOutput
 

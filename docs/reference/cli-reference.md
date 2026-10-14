@@ -2570,6 +2570,194 @@ occ releasebinding delete product-catalog-dev-binding --namespace acme-corp
 
 ---
 
+### releasebindingrevision
+
+Manage release binding revisions: list the revision history of a release binding and roll it back to an earlier revision. See [Revision History and Rollback](../developer-guide/deploying-applications/revision-history-and-rollback.md).
+
+**Usage:**
+
+```bash
+occ releasebindingrevision <subcommand> [flags]
+```
+
+**Aliases:** `releasebindingrevisions`, `rbr`
+
+#### releasebindingrevision list
+
+List the revisions of a release binding, newest first. The NAME column shows each revision as `<release>-r<N>`; columns also show the cause, health, whether it is active and known-good, and its age.
+
+**Usage:**
+
+```bash
+occ releasebindingrevision list [flags]
+```
+
+**Flags:**
+
+- `-n, --namespace` - Namespace name
+- `--binding` - Name of the release binding
+
+**Examples:**
+
+```bash
+# List the revisions of a release binding
+occ releasebindingrevision list --namespace acme-corp --binding product-catalog-development
+```
+
+#### releasebindingrevision get
+
+Get one revision of a release binding, as a table row or in full as YAML.
+
+**Usage:**
+
+```bash
+occ releasebindingrevision get [flags]
+```
+
+**Flags:**
+
+- `-n, --namespace` - Namespace name
+- `--binding` - Name of the release binding
+- `--revision` - Revision number
+- `-o, --output` - Output format: `table` (default) or `yaml`
+
+**Examples:**
+
+```bash
+# Show revision 3
+occ releasebindingrevision get --namespace acme-corp --binding product-catalog-development --revision 3
+
+# Show the full revision, including the binding spec it recorded
+occ releasebindingrevision get --namespace acme-corp --binding product-catalog-development --revision 3 -o yaml
+```
+
+#### releasebindingrevision rollback
+
+Restore the binding spec recorded by an earlier revision. The rollback is previewed first: the spec fields it changes and any warnings are printed, and you are asked to confirm. The binding is pinned (`releasePin: Pinned`). No revision is created: the controller makes the target revision active again under its own name and number. Without a terminal on stdin, `--yes` is required.
+
+**Usage:**
+
+```bash
+occ releasebindingrevision rollback [flags]
+```
+
+**Flags:**
+
+- `-n, --namespace` - Namespace name
+- `--binding` - Name of the release binding
+- `--revision` - Revision number to roll back to
+- `--dry-run` - Show the changes and warnings the rollback would produce without applying it
+- `-y, --yes` - Roll back without asking for confirmation
+
+**Examples:**
+
+```bash
+# Preview a rollback to revision 3 without changing anything
+occ releasebindingrevision rollback --namespace acme-corp --binding product-catalog-development --revision 3 --dry-run
+
+# Roll back to revision 3, confirming interactively
+occ releasebindingrevision rollback --namespace acme-corp --binding product-catalog-development --revision 3
+
+# Roll back without a prompt (for scripts)
+occ releasebindingrevision rollback --namespace acme-corp --binding product-catalog-development --revision 3 --yes
+```
+
+---
+
+### resourcereleasebindingrevision
+
+Manage resource release binding revisions: list the revision history of a resource release binding and roll it back to an earlier revision. See [Revision History and Rollback](../developer-guide/deploying-applications/revision-history-and-rollback.md).
+
+**Usage:**
+
+```bash
+occ resourcereleasebindingrevision <subcommand> [flags]
+```
+
+**Aliases:** `resourcereleasebindingrevisions`, `rrbr`
+
+#### resourcereleasebindingrevision list
+
+List the revisions of a resource release binding, newest first, with the same columns as `releasebindingrevision list`.
+
+**Usage:**
+
+```bash
+occ resourcereleasebindingrevision list [flags]
+```
+
+**Flags:**
+
+- `-n, --namespace` - Namespace name
+- `--binding` - Name of the resource release binding
+
+**Examples:**
+
+```bash
+# List the revisions of a resource release binding
+occ resourcereleasebindingrevision list --namespace acme-corp --binding orders-db-development
+```
+
+#### resourcereleasebindingrevision get
+
+Get one revision of a resource release binding, as a table row or in full as YAML.
+
+**Usage:**
+
+```bash
+occ resourcereleasebindingrevision get [flags]
+```
+
+**Flags:**
+
+- `-n, --namespace` - Namespace name
+- `--binding` - Name of the resource release binding
+- `--revision` - Revision number
+- `-o, --output` - Output format: `table` (default) or `yaml`
+
+**Examples:**
+
+```bash
+# Show revision 3
+occ resourcereleasebindingrevision get --namespace acme-corp --binding orders-db-development --revision 3
+
+# Show the full revision, including the binding spec it recorded
+occ resourcereleasebindingrevision get --namespace acme-corp --binding orders-db-development --revision 3 -o yaml
+```
+
+#### resourcereleasebindingrevision rollback
+
+Restore the binding spec recorded by an earlier revision. The rollback is previewed first: the spec fields it changes and any warnings are printed, and you are asked to confirm. The binding is pinned (`releasePin: Pinned`). No revision is created: the controller makes the target revision active again under its own name and number. Without a terminal on stdin, `--yes` is required.
+
+**Usage:**
+
+```bash
+occ resourcereleasebindingrevision rollback [flags]
+```
+
+**Flags:**
+
+- `-n, --namespace` - Namespace name
+- `--binding` - Name of the resource release binding
+- `--revision` - Revision number to roll back to
+- `--dry-run` - Show the changes and warnings the rollback would produce without applying it
+- `-y, --yes` - Roll back without asking for confirmation
+
+**Examples:**
+
+```bash
+# Preview a rollback to revision 3 without changing anything
+occ resourcereleasebindingrevision rollback --namespace acme-corp --binding orders-db-development --revision 3 --dry-run
+
+# Roll back to revision 3, confirming interactively
+occ resourcereleasebindingrevision rollback --namespace acme-corp --binding orders-db-development --revision 3
+
+# Roll back without a prompt (for scripts)
+occ resourcereleasebindingrevision rollback --namespace acme-corp --binding orders-db-development --revision 3 --yes
+```
+
+---
+
 ### secret
 
 Manage secrets that are pushed to a target plane's external secret store.

@@ -372,6 +372,7 @@ const sidebars: SidebarsConfig = {
           items: [
             "developer-guide/deploying-applications/overview",
             "developer-guide/deploying-applications/deploy-and-promote",
+            "developer-guide/deploying-applications/revision-history-and-rollback",
             "developer-guide/deploying-applications/project-releases",
             "developer-guide/deploying-applications/environment-overrides",
             "developer-guide/deploying-applications/logs-and-troubleshooting",
