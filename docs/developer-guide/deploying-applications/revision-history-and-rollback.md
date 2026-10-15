@@ -40,6 +40,8 @@ Each binding numbers its revisions on its own: the first deploy to an environmen
 
 The object name is unique per environment; the display name tells you which release the revision ran.
 
+Numbers are never reused. When a revision is [deleted](#deleting-a-revision) or removed by [retention](#retention), the others keep their numbers and the gap stays: delete `r2` from `r1 r2 r3` and the next revision is still `r4`. Each binding records the highest number it has used in `status.highestRevision`, and new revisions are numbered above it.
+
 ### What a Revision Records
 
 | Field                                               | Description                                                                                                       |
@@ -100,7 +102,7 @@ frontend-v4-r3           Override  Degraded  false   false       1d
 ...
 ```
 
-For a resource, use `occ resourcereleasebindingrevision list --binding <binding>`. The binding name is shown by `occ releasebinding list`. See the [CLI reference](../../reference/cli-reference.md#releasebindingrevision) for every flag.
+Leave out `--binding` to list every binding's revisions in the namespace, with a BINDING and ENVIRONMENT column; narrow it with `--project`, `--component` and `--environment`. For resources, use `occ resourcereleasebindingrevision list` (with `--binding`, or `--project`, `--resource` and `--environment`). The binding name is shown by `occ releasebinding list`. See the [CLI reference](../../reference/cli-reference.md#releasebindingrevision) for every flag.
 
 ### With the API
 
@@ -125,7 +127,7 @@ When reading a diff, `spec.bindingSpec` is what a rollback would change: a diffe
 From the CLI, print one revision in full and compare two with `diff`:
 
 ```bash
-occ releasebindingrevision get --namespace default --binding frontend-development --revision 3 -o yaml
+occ releasebindingrevision get frontend-development-r3 --namespace default --binding frontend-development -o yaml
 
 diff \
   <(occ releasebindingrevision get -n default --binding frontend-development --revision 3 -o yaml) \
@@ -135,6 +137,37 @@ diff \
 ## Rolling Back
 
 A rollback restores the binding spec an earlier revision recorded. It is always previewed first.
+
+### Undo: Back to the Previous Revision
+
+Without `--revision`, `occ` rolls a binding back to the revision that was active **immediately before** the current one, like `kubectl rollout undo`:
+
+```bash
+occ releasebinding rollback frontend-development --namespace default            # preview, then confirm
+occ releasebinding rollback frontend-development --namespace default --dry-run  # preview only
+occ resourcereleasebinding rollback orders-db-development --namespace default   # resources
+```
+
+"Previous" follows activation history, not revision numbers. A rollback makes an old revision active again, so the previous revision can be numbered higher than the current one:
+
+| Step                    | Active | Previous |
+| ----------------------- | ------ | -------- |
+| Deploy `r1` … `r5`      | `r5`   | `r4`     |
+| `rollback --revision 3` | `r3`   | `r5`     |
+| `rollback` (undo)       | `r5`   | `r3`     |
+| `rollback` (undo)       | `r3`   | `r5`     |
+
+Each time a revision becomes active, the controller writes on it `openchoreo.dev/previous-revision: "<N>"`, the number of the revision it replaced (`"0"` for the first). The preview names the target, and after you confirm, `occ` applies that exact revision number.
+
+The undo is refused, and nothing changes, when:
+
+- the binding has only one revision, or the current one was its first;
+- the previous revision has been deleted. It is never replaced by another revision; name one with `--revision`;
+- the binding has a change the controller has not recorded yet. Retry in a moment.
+
+Revisions recorded before this tracking existed have no `previous-revision` annotation. For them, the target is the revision activated just before the current one. If revisions are missing from such a history, a deleted one may have been active in between, so the preview shows the warning `PreviousRevisionInferred`; check the target before confirming. `--revision 0` is an error; leave the flag out instead.
+
+The undo is available in `occ` and the API (omit `revision`). Backstage and the MCP tools always name a revision.
 
 ### In Backstage
 
@@ -148,16 +181,16 @@ The button is disabled, with a tooltip saying why, when the revision is already 
 
 ```bash
 # Preview only: print the changes and warnings, change nothing
-occ releasebindingrevision rollback --namespace default --binding frontend-development --revision 2 --dry-run
+occ releasebinding rollback frontend-development --namespace default --revision 2 --dry-run
 
 # Preview, then confirm at the prompt
-occ releasebindingrevision rollback --namespace default --binding frontend-development --revision 2
+occ releasebinding rollback frontend-development --namespace default --revision 2
 
 # Apply without a prompt (scripts); the warnings are still printed
-occ releasebindingrevision rollback --namespace default --binding frontend-development --revision 2 --yes
+occ releasebinding rollback frontend-development --namespace default --revision 2 --yes
 ```
 
-Without a terminal on stdin, `occ` refuses to roll back unless `--yes` is given. Resources use `occ resourcereleasebindingrevision rollback` with the same flags.
+Without a terminal on stdin, `occ` refuses to roll back unless `--yes` is given. Resources use `occ resourcereleasebinding rollback <binding>` with the same flags.
 
 ### With the API
 
@@ -167,22 +200,23 @@ curl -X POST "$OPENCHOREO_API/api/v1/namespaces/default/releasebindings/frontend
   -d '{"revision": 2, "dryRun": true}'
 ```
 
-Resources use `POST /api/v1/namespaces/{namespace}/resourcereleasebindings/{name}/rollback`. The response has the target's object name (`revisionName`) and display name (`revisionDisplayName`), `revision`, the previously active number (`revertedFrom`), `dryRun`, `changes` and `warnings`. Applying a rollback needs the `releasebinding:rollback` or `resourcereleasebinding:rollback` permission; the default `developer`, `sre` and `platform-engineer` roles have both. Applied rollbacks are written to the audit log; dry runs are not.
+Omit `revision` to roll back to the previously active revision (see [Undo](#undo-back-to-the-previous-revision)). Resources use `POST /api/v1/namespaces/{namespace}/resourcereleasebindings/{name}/rollback`. The response has the target's object name (`revisionName`) and display name (`revisionDisplayName`), `revision`, the previously active number (`revertedFrom`), `dryRun`, `changes` and `warnings`. Applying a rollback needs the `releasebinding:rollback` or `resourcereleasebinding:rollback` permission; the default `developer`, `sre` and `platform-engineer` roles have both. When [audit logging](../../platform-engineer-guide/audit-logging.mdx) is enabled, every rollback call, from the API or MCP, is recorded as a `rollback_release_binding` or `rollback_resource_release_binding` event, and the record's resource metadata has `dryRun: true` for a preview and `dryRun: false` for an applied rollback.
 
 ### Warnings
 
 Warnings never block a rollback; they tell you what you are restoring.
 
-| Warning                | Meaning                                                                                                                                            |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TargetNotKnownGood`   | The target never stayed `Healthy` for the known-good window                                                                                        |
-| `TargetUnhealthy`      | The target was `Degraded` or `Failed` when it stopped being active                                                                                 |
-| `NoSpecChange`         | The target records the current spec; nothing changes                                                                                               |
-| `UnrecordedChange`     | The binding has a spec change the controller has not recorded yet; the rollback discards it                                                        |
-| `BindingWillBePinned`  | `releasePin` changes from `Auto` to `Pinned` (see [pinning](#automatic-deployment-and-pinning))                                                    |
-| `ProjectCellDrift`     | The project in this environment is now bound to a ProjectRelease created after the target revision                                                 |
-| `TargetUndeploys`      | The target's `state` is `Undeploy`, so rolling back removes the component from the environment (ReleaseBindings only)                              |
-| `SecretReferenceDrift` | A SecretReference the target uses no longer exists, no longer has a key it uses, or was recreated after the target revision (ReleaseBindings only) |
+| Warning                    | Meaning                                                                                                                                                                        |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `TargetNotKnownGood`       | The target never stayed `Healthy` for the known-good window                                                                                                                    |
+| `TargetUnhealthy`          | The target was `Degraded` or `Failed` when it stopped being active                                                                                                             |
+| `NoSpecChange`             | The target records the current spec; nothing changes                                                                                                                           |
+| `UnrecordedChange`         | The binding has a spec change the controller has not recorded yet; the rollback discards it                                                                                    |
+| `BindingWillBePinned`      | `releasePin` changes from `Auto` to `Pinned` (see [pinning](#automatic-deployment-and-pinning))                                                                                |
+| `ProjectCellDrift`         | The project in this environment is now bound to a ProjectRelease created after the target revision                                                                             |
+| `TargetUndeploys`          | The target's `state` is `Undeploy`, so rolling back removes the component from the environment (ReleaseBindings only)                                                          |
+| `SecretReferenceDrift`     | A SecretReference the target uses no longer exists, no longer has a key it uses, or was recreated after the target revision (ReleaseBindings only)                             |
+| `PreviousRevisionInferred` | No revision was named and the current revision predates activation tracking; the target was taken from activation order and a deleted revision may have been active in between |
 
 ### Errors
 
@@ -192,6 +226,7 @@ Warnings never block a rollback; they tell you what you are restoring.
 | 404    | -                         | The binding or the revision does not exist                                                                                                        |
 | 409    | `RELEASE_DELETED`         | The release the target revision ran has been deleted, so its spec cannot be restored. Pick another revision                                       |
 | 409    | `CONCURRENT_MODIFICATION` | The binding changed between the preview and the apply. Nothing was written; review the new preview and apply again (Backstage re-runs it for you) |
+| 409    | `NO_PREVIOUS_REVISION`    | No revision was named and there is no previous revision to return to, or it was deleted. Name a revision                                          |
 
 Releases are immutable, so a revision can only be restored while its release still exists. Backstage marks such component revisions in advance. For resources it does not, and the dry run reports `RELEASE_DELETED` in the confirmation dialog.
 
@@ -203,6 +238,16 @@ The API checks the binding and target, then writes the binding once, conditional
 2. No revision is written by the API. On its next reconcile, the controller sees that the binding's spec matches the target's `snapshotHash` and makes the **existing** target revision active again. It keeps its name and number, its health restarts at `Progressing`, and an existing known-good mark is kept.
 3. The previously active revision becomes inactive, keeping the health it had.
 4. `status.currentRevision` is set to the target, and the restored spec is rendered and applied to the data plane like any other change. Health is then tracked until it settles.
+
+### Bindings Managed by GitOps
+
+When a binding's YAML lives in a [GitOps repository](../../platform-engineer-guide/gitops/overview.md), Git is the source of truth, and revision history works with it:
+
+- Every change Flux applies from Git is recorded like any other change: a new release records a `Deploy` revision, changed overrides an `Override` revision, and `state: Undeploy` an `Undeploy` revision. Returning Git to a spec that was already recorded (for example with `git revert`) makes that revision active again instead of creating a new one.
+- A rollback through Backstage, `occ`, the API or MCP changes only the cluster, not Git. On its next reconcile, Flux applies the fields Git declares again, so the rollback is undone and the revision matching Git becomes active again. Until then the rolled-back release runs, typically for no longer than the Kustomization's `interval`.
+- `releasePin` does not stop Flux. If Git does not declare `releasePin`, the binding stays `Pinned` after Flux restores Git's release; if Git declares it, Flux restores that value too.
+
+To roll back a GitOps-managed binding, change Git: revert the commit, or set `releaseName` and the overrides to the target revision's `spec.bindingSpec`. To hold a rollback during an incident before Git is updated, suspend the Kustomization that manages the binding (`flux suspend kustomization <name>`), roll back, then update Git and resume it (`flux resume kustomization <name>`).
 
 ## Health and Known-Good Revisions
 
@@ -251,6 +296,7 @@ ResourceReleaseBindings are never advanced automatically; they change only when 
 Each binding keeps at most 10 revisions. When a new revision is recorded and the history is over the limit, the oldest are deleted, except:
 
 - the active revision,
+- the revision that was active before it, the target of an [undo](#undo-back-to-the-previous-revision),
 - the newest known-good revision, the rollback target of last resort,
 - any revision annotated `openchoreo.dev/keep: "true"`.
 
@@ -263,6 +309,30 @@ kubectl annotate releasebindingrevision frontend-development-r3 -n default openc
 If the protected revisions alone exceed the limit, they are all kept and the binding gets a `RevisionHistoryLimitExceeded` warning event.
 
 Platform engineers can change the limit and the known-good window with the control plane chart's `controllerManager.manager.revisionHistoryLimit` (default `10`; `0` keeps every revision) and `controllerManager.manager.revisionKnownGoodWindow` (default `"60s"`; `"0"` marks a revision known-good on its first `Healthy` observation). See the [control plane Helm reference](../../reference/helm/control-plane.mdx).
+
+## Deleting a Revision
+
+You can remove one old revision from a binding's history. It can no longer be rolled back to; the binding, its active revision and the running workload are not touched, and the other revisions keep their numbers.
+
+```bash
+occ releasebindingrevision delete r2 --binding frontend-development --namespace default --dry-run  # check only
+occ releasebindingrevision delete r2 --binding frontend-development --namespace default            # shows it, asks [y/N]
+occ resourcereleasebindingrevision delete r3 --binding orders-db-development --namespace default
+```
+
+In Backstage, open the Revision Browser, highlight an inactive revision and click **Delete r*N***. The dialog shows the revision, binding, environment and status, checks with the server that it may be deleted, and deletes it only when you confirm. Numbers missing from the history then appear as **Unavailable** rows.
+
+The API is `DELETE /api/v1/namespaces/{namespace}/releasebindingrevisions/{name}` (resources: `…/resourcereleasebindingrevisions/{name}`), with optional `binding` and `dryRun` query parameters. It needs the `releasebinding:delete-revision` or `resourcereleasebinding:delete-revision` permission; the default roles that can delete bindings have it.
+
+A revision cannot be deleted (409 `REVISION_PROTECTED`) when it is:
+
+- active,
+- the newest known-good revision,
+- annotated `openchoreo.dev/keep: "true"`,
+- the target of a rollback that is being applied, or
+- not yet fully recorded by the controller.
+
+The delete is conditional on the revision as checked, so a revision that becomes active in the meantime is not deleted (409 `CONCURRENT_MODIFICATION`). The previously active revision can be deleted by hand; an undo then reports that it was deleted. Deleting revisions directly with `kubectl` skips these checks.
 
 ## AI Agents (MCP)
 
@@ -284,7 +354,7 @@ The control plane MCP server's Deployment toolset includes six revision tools:
 3. show you the target, the `changes` and every warning, and ask you to confirm;
 4. only then call again with the same `revision` and `dry_run: false`.
 
-The tools use the same permissions as the API. For example, ask: _"Roll back frontend in development to the last known-good revision."_
+The tools use the same permissions as the API. They always name a revision: undo and revision deletion are not available to agents. For example, ask: _"Roll back frontend in development to the last known-good revision."_
 
 ## Related
 

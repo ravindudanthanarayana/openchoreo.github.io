@@ -2568,11 +2568,49 @@ occ releasebinding delete [RELEASE_BINDING_NAME] [flags]
 occ releasebinding delete product-catalog-dev-binding --namespace acme-corp
 ```
 
+#### releasebinding rollback
+
+Roll a release binding back to one of its revisions (see `occ releasebindingrevision list`). Without `--revision`, it rolls back to the revision that was active immediately before the current one, by activation history (like `kubectl rollout undo`); it refuses, changing nothing, if that revision was deleted or there is none. The rollback is previewed first: the spec fields it changes and any warnings are printed, and you are asked to confirm. The binding is pinned (`releasePin: Pinned`). No revision is created: the controller makes the target revision active again under its own name and number. Without a terminal on stdin, `--yes` is required.
+
+Resource release bindings use `occ resourcereleasebinding rollback [RESOURCE_RELEASE_BINDING_NAME]` with the same flags.
+
+**Usage:**
+
+```bash
+occ releasebinding rollback [RELEASE_BINDING_NAME] [flags]
+```
+
+**Flags:**
+
+- `-n, --namespace` - Namespace name
+- `--revision` - Revision to roll back to (default: the revision active before the current one; must be at least 1 when given)
+- `--dry-run` - Show the changes and warnings the rollback would produce without applying it
+- `-y, --yes` - Roll back without asking for confirmation
+
+**Examples:**
+
+```bash
+# Roll back to the previously active revision, confirming interactively
+occ releasebinding rollback product-catalog-development --namespace acme-corp
+
+# Preview a rollback to revision 3 without changing anything
+occ releasebinding rollback product-catalog-development --namespace acme-corp --revision 3 --dry-run
+
+# Roll back to revision 3, confirming interactively
+occ releasebinding rollback product-catalog-development --namespace acme-corp --revision 3
+
+# Roll back without a prompt (for scripts)
+occ releasebinding rollback product-catalog-development --namespace acme-corp --revision 3 --yes
+
+# A resource release binding
+occ resourcereleasebinding rollback orders-db-development --namespace acme-corp --revision 2
+```
+
 ---
 
 ### releasebindingrevision
 
-Manage release binding revisions: list the revision history of a release binding and roll it back to an earlier revision. See [Revision History and Rollback](../developer-guide/deploying-applications/revision-history-and-rollback.md).
+List, show and delete release binding revisions. To roll a binding back to one of them, use `occ releasebinding rollback`. See [Revision History and Rollback](../developer-guide/deploying-applications/revision-history-and-rollback.md).
 
 **Usage:**
 
@@ -2584,7 +2622,7 @@ occ releasebindingrevision <subcommand> [flags]
 
 #### releasebindingrevision list
 
-List the revisions of a release binding, newest first. The NAME column shows each revision as `<release>-r<N>`; columns also show the cause, health, whether it is active and known-good, and its age.
+List revisions, newest first. With `--binding`, the revisions of that one binding. Without it, the revisions of every release binding in the namespace, with BINDING and ENVIRONMENT columns (and PROJECT unless `--project` is given); narrow them with `--project`, `--component` and `--environment`.
 
 **Usage:**
 
@@ -2594,24 +2632,39 @@ occ releasebindingrevision list [flags]
 
 **Flags:**
 
-- `-n, --namespace` - Namespace name
+- `-n, --namespace` - Namespace name (defaults to the current context's namespace)
 - `--binding` - Name of the release binding
+- `-p, --project` - Only bindings of this project
+- `-c, --component` - Only bindings of this component
+- `--environment` - Only bindings in this environment
 
 **Examples:**
 
 ```bash
-# List the revisions of a release binding
+# Every release binding revision in the namespace
+occ releasebindingrevision list --namespace acme-corp
+
+# Every binding in one project
+occ releasebindingrevision list --namespace acme-corp --project online-store
+
+# Every environment of one component
+occ releasebindingrevision list --namespace acme-corp --component product-catalog
+
+# Every component in one environment
+occ releasebindingrevision list --namespace acme-corp --environment production
+
+# One binding
 occ releasebindingrevision list --namespace acme-corp --binding product-catalog-development
 ```
 
 #### releasebindingrevision get
 
-Get one revision of a release binding, as a table row or in full as YAML.
+Get one revision of a release binding, as a table row or in full as YAML. Name the revision with `REVISION_NAME` (its object name such as `product-catalog-development-r3`, the display name shown by `list`, or `r3`) or with `--revision`.
 
 **Usage:**
 
 ```bash
-occ releasebindingrevision get [flags]
+occ releasebindingrevision get [REVISION_NAME] [flags]
 ```
 
 **Flags:**
@@ -2625,48 +2678,51 @@ occ releasebindingrevision get [flags]
 
 ```bash
 # Show revision 3
+occ releasebindingrevision get product-catalog-development-r3 --namespace acme-corp --binding product-catalog-development
+
+# The same revision by number
 occ releasebindingrevision get --namespace acme-corp --binding product-catalog-development --revision 3
 
 # Show the full revision, including the binding spec it recorded
-occ releasebindingrevision get --namespace acme-corp --binding product-catalog-development --revision 3 -o yaml
+occ releasebindingrevision get r3 --namespace acme-corp --binding product-catalog-development -o yaml
 ```
 
-#### releasebindingrevision rollback
+#### releasebindingrevision delete
 
-Restore the binding spec recorded by an earlier revision. The rollback is previewed first: the spec fields it changes and any warnings are printed, and you are asked to confirm. The binding is pinned (`releasePin: Pinned`). No revision is created: the controller makes the target revision active again under its own name and number. Without a terminal on stdin, `--yes` is required.
+Delete one revision from a release binding's history. It can no longer be rolled back to; the other revisions keep their numbers and the deleted number is never reused. The revision is shown and you are asked to confirm; without a terminal on stdin, `--yes` is required. The server refuses the active revision, the newest known-good revision and revisions annotated `openchoreo.dev/keep: "true"`.
 
 **Usage:**
 
 ```bash
-occ releasebindingrevision rollback [flags]
+occ releasebindingrevision delete [REVISION_NAME] [flags]
 ```
 
 **Flags:**
 
 - `-n, --namespace` - Namespace name
 - `--binding` - Name of the release binding
-- `--revision` - Revision number to roll back to
-- `--dry-run` - Show the changes and warnings the rollback would produce without applying it
-- `-y, --yes` - Roll back without asking for confirmation
+- `--revision` - Revision number
+- `--dry-run` - Check that the revision can be deleted without deleting it
+- `-y, --yes` - Delete without asking for confirmation
 
 **Examples:**
 
 ```bash
-# Preview a rollback to revision 3 without changing anything
-occ releasebindingrevision rollback --namespace acme-corp --binding product-catalog-development --revision 3 --dry-run
+# Check that revision 2 can be deleted
+occ releasebindingrevision delete --namespace acme-corp --binding product-catalog-development --revision 2 --dry-run
 
-# Roll back to revision 3, confirming interactively
-occ releasebindingrevision rollback --namespace acme-corp --binding product-catalog-development --revision 3
+# Delete revision 2, confirming interactively
+occ releasebindingrevision delete r2 --namespace acme-corp --binding product-catalog-development
 
-# Roll back without a prompt (for scripts)
-occ releasebindingrevision rollback --namespace acme-corp --binding product-catalog-development --revision 3 --yes
+# Delete without a prompt (scripts)
+occ releasebindingrevision delete --namespace acme-corp --binding product-catalog-development --revision 2 --yes
 ```
 
 ---
 
 ### resourcereleasebindingrevision
 
-Manage resource release binding revisions: list the revision history of a resource release binding and roll it back to an earlier revision. See [Revision History and Rollback](../developer-guide/deploying-applications/revision-history-and-rollback.md).
+List, show and delete resource release binding revisions. To roll a binding back to one of them, use `occ resourcereleasebinding rollback`. See [Revision History and Rollback](../developer-guide/deploying-applications/revision-history-and-rollback.md).
 
 **Usage:**
 
@@ -2678,7 +2734,7 @@ occ resourcereleasebindingrevision <subcommand> [flags]
 
 #### resourcereleasebindingrevision list
 
-List the revisions of a resource release binding, newest first, with the same columns as `releasebindingrevision list`.
+List revisions, newest first. With `--binding`, the revisions of that one binding. Without it, the revisions of every resource release binding in the namespace, with BINDING and ENVIRONMENT columns (and PROJECT unless `--project` is given); narrow them with `--project`, `--resource` and `--environment`.
 
 **Usage:**
 
@@ -2690,22 +2746,37 @@ occ resourcereleasebindingrevision list [flags]
 
 - `-n, --namespace` - Namespace name
 - `--binding` - Name of the resource release binding
+- `-p, --project` - Only bindings of this project
+- `--resource` - Only bindings of this resource
+- `--environment` - Only bindings in this environment
 
 **Examples:**
 
 ```bash
-# List the revisions of a resource release binding
+# Every resource release binding revision in the namespace
+occ resourcereleasebindingrevision list --namespace acme-corp
+
+# Every binding in one project
+occ resourcereleasebindingrevision list --namespace acme-corp --project online-store
+
+# Every environment of one resource
+occ resourcereleasebindingrevision list --namespace acme-corp --resource orders-db
+
+# Every resource in one environment
+occ resourcereleasebindingrevision list --namespace acme-corp --environment production
+
+# One binding
 occ resourcereleasebindingrevision list --namespace acme-corp --binding orders-db-development
 ```
 
 #### resourcereleasebindingrevision get
 
-Get one revision of a resource release binding, as a table row or in full as YAML.
+Get one revision of a resource release binding, as a table row or in full as YAML. Name the revision with `REVISION_NAME` (its object name such as `orders-db-development-r3`, the display name shown by `list`, or `r3`) or with `--revision`.
 
 **Usage:**
 
 ```bash
-occ resourcereleasebindingrevision get [flags]
+occ resourcereleasebindingrevision get [REVISION_NAME] [flags]
 ```
 
 **Flags:**
@@ -2719,41 +2790,44 @@ occ resourcereleasebindingrevision get [flags]
 
 ```bash
 # Show revision 3
+occ resourcereleasebindingrevision get orders-db-development-r3 --namespace acme-corp --binding orders-db-development
+
+# The same revision by number
 occ resourcereleasebindingrevision get --namespace acme-corp --binding orders-db-development --revision 3
 
 # Show the full revision, including the binding spec it recorded
-occ resourcereleasebindingrevision get --namespace acme-corp --binding orders-db-development --revision 3 -o yaml
+occ resourcereleasebindingrevision get r3 --namespace acme-corp --binding orders-db-development -o yaml
 ```
 
-#### resourcereleasebindingrevision rollback
+#### resourcereleasebindingrevision delete
 
-Restore the binding spec recorded by an earlier revision. The rollback is previewed first: the spec fields it changes and any warnings are printed, and you are asked to confirm. The binding is pinned (`releasePin: Pinned`). No revision is created: the controller makes the target revision active again under its own name and number. Without a terminal on stdin, `--yes` is required.
+Delete one revision from a resource release binding's history. It can no longer be rolled back to; the other revisions keep their numbers and the deleted number is never reused. The revision is shown and you are asked to confirm; without a terminal on stdin, `--yes` is required. The server refuses the active revision, the newest known-good revision and revisions annotated `openchoreo.dev/keep: "true"`.
 
 **Usage:**
 
 ```bash
-occ resourcereleasebindingrevision rollback [flags]
+occ resourcereleasebindingrevision delete [REVISION_NAME] [flags]
 ```
 
 **Flags:**
 
 - `-n, --namespace` - Namespace name
 - `--binding` - Name of the resource release binding
-- `--revision` - Revision number to roll back to
-- `--dry-run` - Show the changes and warnings the rollback would produce without applying it
-- `-y, --yes` - Roll back without asking for confirmation
+- `--revision` - Revision number
+- `--dry-run` - Check that the revision can be deleted without deleting it
+- `-y, --yes` - Delete without asking for confirmation
 
 **Examples:**
 
 ```bash
-# Preview a rollback to revision 3 without changing anything
-occ resourcereleasebindingrevision rollback --namespace acme-corp --binding orders-db-development --revision 3 --dry-run
+# Check that revision 2 can be deleted
+occ resourcereleasebindingrevision delete --namespace acme-corp --binding orders-db-development --revision 2 --dry-run
 
-# Roll back to revision 3, confirming interactively
-occ resourcereleasebindingrevision rollback --namespace acme-corp --binding orders-db-development --revision 3
+# Delete revision 2, confirming interactively
+occ resourcereleasebindingrevision delete r2 --namespace acme-corp --binding orders-db-development
 
-# Roll back without a prompt (for scripts)
-occ resourcereleasebindingrevision rollback --namespace acme-corp --binding orders-db-development --revision 3 --yes
+# Delete without a prompt (scripts)
+occ resourcereleasebindingrevision delete --namespace acme-corp --binding orders-db-development --revision 2 --yes
 ```
 
 ---
