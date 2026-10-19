@@ -2570,7 +2570,7 @@ occ releasebinding delete product-catalog-dev-binding --namespace acme-corp
 
 #### releasebinding rollback
 
-Roll a release binding back to one of its revisions (see `occ releasebindingrevision list`). Without `--revision`, it rolls back to the revision that was active immediately before the current one, by activation history (like `kubectl rollout undo`); it refuses, changing nothing, if that revision was deleted or there is none. The rollback is previewed first: the spec fields it changes and any warnings are printed, and you are asked to confirm. The binding is pinned (`releasePin: Pinned`). No revision is created: the controller makes the target revision active again under its own name and number. Without a terminal on stdin, `--yes` is required.
+Roll a release binding back to one of its revisions (see `occ releasebindingrevision list`). Without `--revision`, it rolls back to the revision that was active immediately before the current one, by activation history (like `kubectl rollout undo`); it refuses, changing nothing, if that revision was deleted or there is none. The rollback is previewed first: the spec fields it changes and any warnings are printed, and you are asked to confirm. No revision is created: the controller makes the target revision active again under its own name and number. Without a terminal on stdin, `--yes` is required. A rollback in the first environment of a component with auto deploy enabled is refused, because auto deploy would undo it: turn off auto deploy for the component first.
 
 Resource release bindings use `occ resourcereleasebinding rollback [RESOURCE_RELEASE_BINDING_NAME]` with the same flags.
 

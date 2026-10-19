@@ -27,15 +27,14 @@ metadata:
 
 ### Spec Fields
 
-| Field                             | Type                                        | Required | Default | Description                                                                                                                                                                                                                  |
-| --------------------------------- | ------------------------------------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `owner`                           | [ReleaseBindingOwner](#releasebindingowner) | Yes      | -       | Identifies the component this release binding applies to                                                                                                                                                                     |
-| `environment`                     | string                                      | Yes      | -       | Name of the environment (must match an Environment CR)                                                                                                                                                                       |
-| `releaseName`                     | string                                      | Yes      | -       | Name of the ComponentRelease to bind to this environment                                                                                                                                                                     |
-| `componentTypeEnvironmentConfigs` | object                                      | No       | -       | Overrides for ComponentType `environmentConfigs` parameters                                                                                                                                                                  |
-| `traitEnvironmentConfigs`         | map[string]object                           | No       | -       | Environment-specific trait parameter overrides                                                                                                                                                                               |
-| `workloadOverrides`               | [WorkloadOverride](#workloadoverride)       | No       | -       | Overrides for workload configurations                                                                                                                                                                                        |
-| `releasePin`                      | string                                      | No       | `Auto`  | `Auto` lets auto-deploy advance `releaseName`; `Pinned` holds it. A rollback sets `Pinned`. See [pinning](../../../developer-guide/deploying-applications/revision-history-and-rollback.md#automatic-deployment-and-pinning) |
+| Field                             | Type                                        | Required | Default | Description                                                 |
+| --------------------------------- | ------------------------------------------- | -------- | ------- | ----------------------------------------------------------- |
+| `owner`                           | [ReleaseBindingOwner](#releasebindingowner) | Yes      | -       | Identifies the component this release binding applies to    |
+| `environment`                     | string                                      | Yes      | -       | Name of the environment (must match an Environment CR)      |
+| `releaseName`                     | string                                      | Yes      | -       | Name of the ComponentRelease to bind to this environment    |
+| `componentTypeEnvironmentConfigs` | object                                      | No       | -       | Overrides for ComponentType `environmentConfigs` parameters |
+| `traitEnvironmentConfigs`         | map[string]object                           | No       | -       | Environment-specific trait parameter overrides              |
+| `workloadOverrides`               | [WorkloadOverride](#workloadoverride)       | No       | -       | Overrides for workload configurations                       |
 
 ### ReleaseBindingOwner
 

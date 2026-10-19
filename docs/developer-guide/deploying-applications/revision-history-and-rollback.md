@@ -49,7 +49,7 @@ Numbers are never reused. When a revision is [deleted](#deleting-a-revision) or 
 | `spec.revision`                                     | The revision number, counting from 1 per binding                                                                  |
 | `spec.cause`                                        | Why it was recorded (see below)                                                                                   |
 | `spec.componentReleaseName` / `resourceReleaseName` | The release the binding pointed to                                                                                |
-| `spec.snapshotHash`                                 | SHA-256 of the binding spec, ignoring `releasePin`                                                                |
+| `spec.snapshotHash`                                 | SHA-256 of the binding spec                                                                                       |
 | `spec.bindingSpec`                                  | A full copy of the binding spec; this is what a rollback restores                                                 |
 | `status.active`                                     | `true` for exactly one revision: the one the binding runs now                                                     |
 | `status.health`                                     | `Progressing`, `Healthy`, `Degraded`, `Failed` or `Unknown`                                                       |
@@ -64,7 +64,6 @@ On every reconcile the controller compares the binding spec with its history:
 
 - **A spec it has not seen before** creates the next revision.
 - **A spec it has already recorded** (a rollback, or any edit back to an earlier spec) makes that existing revision active again under its own name and number. No new revision is created, and the binding gets a `RevisionReactivated` event.
-- **A change to `releasePin` alone** is not a new spec and records nothing.
 
 A new revision's `cause` describes how it differs from the one it replaces:
 
@@ -212,7 +211,6 @@ Warnings never block a rollback; they tell you what you are restoring.
 | `TargetUnhealthy`          | The target was `Degraded` or `Failed` when it stopped being active                                                                                                             |
 | `NoSpecChange`             | The target records the current spec; nothing changes                                                                                                                           |
 | `UnrecordedChange`         | The binding has a spec change the controller has not recorded yet; the rollback discards it                                                                                    |
-| `BindingWillBePinned`      | `releasePin` changes from `Auto` to `Pinned` (see [pinning](#automatic-deployment-and-pinning))                                                                                |
 | `ProjectCellDrift`         | The project in this environment is now bound to a ProjectRelease created after the target revision                                                                             |
 | `TargetUndeploys`          | The target's `state` is `Undeploy`, so rolling back removes the component from the environment (ReleaseBindings only)                                                          |
 | `SecretReferenceDrift`     | A SecretReference the target uses no longer exists, no longer has a key it uses, or was recreated after the target revision (ReleaseBindings only)                             |
@@ -227,6 +225,7 @@ Warnings never block a rollback; they tell you what you are restoring.
 | 409    | `RELEASE_DELETED`         | The release the target revision ran has been deleted, so its spec cannot be restored. Pick another revision                                       |
 | 409    | `CONCURRENT_MODIFICATION` | The binding changed between the preview and the apply. Nothing was written; review the new preview and apply again (Backstage re-runs it for you) |
 | 409    | `NO_PREVIOUS_REVISION`    | No revision was named and there is no previous revision to return to, or it was deleted. Name a revision                                          |
+| 409    | `AUTO_DEPLOY_ENABLED`     | The binding is in the first environment of a component with auto deploy enabled; see [Rollbacks and auto deploy](#rollbacks-and-auto-deploy)      |
 
 Releases are immutable, so a revision can only be restored while its release still exists. Backstage marks such component revisions in advance. For resources it does not, and the dry run reports `RELEASE_DELETED` in the confirmation dialog.
 
@@ -234,7 +233,7 @@ Releases are immutable, so a revision can only be restored while its release sti
 
 The API checks the binding and target, then writes the binding once, conditional on the version it read:
 
-1. `spec` is replaced with the target's `bindingSpec`, and `spec.releasePin` is set to `Pinned`.
+1. `spec` is replaced with the target's `bindingSpec`.
 2. No revision is written by the API. On its next reconcile, the controller sees that the binding's spec matches the target's `snapshotHash` and makes the **existing** target revision active again. It keeps its name and number, its health restarts at `Progressing`, and an existing known-good mark is kept.
 3. The previously active revision becomes inactive, keeping the health it had.
 4. `status.currentRevision` is set to the target, and the restored spec is rendered and applied to the data plane like any other change. Health is then tracked until it settles.
@@ -245,7 +244,6 @@ When a binding's YAML lives in a [GitOps repository](../../platform-engineer-gui
 
 - Every change Flux applies from Git is recorded like any other change: a new release records a `Deploy` revision, changed overrides an `Override` revision, and `state: Undeploy` an `Undeploy` revision. Returning Git to a spec that was already recorded (for example with `git revert`) makes that revision active again instead of creating a new one.
 - A rollback through Backstage, `occ`, the API or MCP changes only the cluster, not Git. On its next reconcile, Flux applies the fields Git declares again, so the rollback is undone and the revision matching Git becomes active again. Until then the rolled-back release runs, typically for no longer than the Kustomization's `interval`.
-- `releasePin` does not stop Flux. If Git does not declare `releasePin`, the binding stays `Pinned` after Flux restores Git's release; if Git declares it, Flux restores that value too.
 
 To roll back a GitOps-managed binding, change Git: revert the commit, or set `releaseName` and the overrides to the target revision's `spec.bindingSpec`. To hold a rollback during an incident before Git is updated, suspend the Kustomization that manages the binding (`flux suspend kustomization <name>`), roll back, then update Git and resume it (`flux resume kustomization <name>`).
 
@@ -267,29 +265,22 @@ Prefer the newest known-good revision that is not active as a rollback target.
 
 In Backstage, the revision list refreshes every 5 seconds while any revision is `Progressing` or has no health yet. After a rollback it also refreshes until the target shows as active, for up to 60 seconds, so you see `Progressing` turn into `Healthy` without reloading.
 
-## Automatic Deployment and Pinning
+## Rollbacks and Auto Deploy
 
-Both binding kinds have `spec.releasePin`:
+A component with `autoDeploy: true` keeps the ReleaseBinding of the **first environment** of its deployment pipeline on its latest release: whenever that binding changes, the Component controller moves it back to the latest release within seconds. A rollback there would be undone almost immediately.
 
-| Value            | Meaning                                                           |
-| ---------------- | ----------------------------------------------------------------- |
-| `Auto` (default) | The release may be advanced automatically                         |
-| `Pinned`         | The release is held at its current value until someone changes it |
+So a rollback in that environment is refused while the component's auto deploy is enabled. The first environment is the one at the start of the project's deployment pipeline, whatever its name. Backstage shows the message in the rollback dialog, `occ` prints it and exits with an error, and the API returns `409 AUTO_DEPLOY_ENABLED`. Nothing is changed, and the preview is refused too:
 
-For components with auto-deploy enabled, a new ComponentRelease normally moves the first environment's ReleaseBinding to it. A `Pinned` binding is skipped. A rollback pins the binding so that the next auto-deploy does not immediately undo it. You can still deploy or promote a release to a pinned binding yourself; the binding stays pinned.
-
-Nothing sets `releasePin` back to `Auto` for you. When the problem is fixed and you want auto-deploy to resume, set it explicitly:
-
-```bash
-kubectl patch releasebinding frontend-development -n default --type merge \
-  -p '{"spec":{"releasePin":"Auto"}}'
+```text
+Rollback blocked: auto-deploy is enabled for component "frontend", and "development" is the first
+environment of its deployment pipeline, so auto-deploy would move release binding
+"frontend-development" back to the latest release right after the rollback. Turn off auto-deploy
+for the component, then roll back again
 ```
 
-Changing `releasePin` does not record a revision.
+To roll back that environment, turn off auto deploy for the component first (in Backstage, the toggle in the component's Set Up tab), then roll back again. Rolling back never changes the auto deploy setting itself.
 
-:::note
-ResourceReleaseBindings are never advanced automatically; they change only when you promote or update them. A rollback still sets `releasePin: Pinned` on a ResourceReleaseBinding, but no controller acts on it today.
-:::
+Other environments, components without auto deploy, and ResourceReleaseBindings are not affected: nothing moves those bindings automatically.
 
 ## Retention
 
